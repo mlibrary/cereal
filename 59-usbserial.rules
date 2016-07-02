@@ -4,7 +4,7 @@
 #
 ####
 # To re-enumerate serial ports after editing this file, reboot, or run:
-# for DEV in $(ls /dev/ttyUSB*); do udevad$m test `udevadm info -q path -n $DEV`; done
+# for DEV in $(ls /dev/ttyUSB*); do udevadm test `udevadm info -q path -n $DEV`; done
 ####
 #
 # USB serial devices lacking serial numbers
