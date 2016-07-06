@@ -125,7 +125,7 @@ if save
 end
 
 # try to connect to existing session, if found
-open_tty = `lsof | grep #{tty_name} | tr -s ' ' '\t' | cut -f2 | head -1`.chomp
+open_tty = `lsof | egrep '#{tty_name}\\b' | tr -s ' ' '\t' | cut -f2 | head -1`.chomp
 if !open_tty.empty?
   session = `screen -list | grep '#{open_tty}\\.' | cut -f2`.chomp
   attach = `screen -list | grep '#{open_tty}\\.' | cut -f4`.chomp
