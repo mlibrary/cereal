@@ -9,8 +9,6 @@ USAGE = "usage: #{$0} ttyName [tty,config,string]
 default_settings = "115200,cs8,-parenb,-cstopb,-hupcl" # 115200,8N1
 
 (name,settings_from_cmd) = (ARGV)
-#puts "NAME: #{name}"
-#puts "SETT: #{settings}"
 unless name
   puts USAGE
   raise "bad command syntax"
@@ -22,7 +20,7 @@ if /^(help|-h|--help|-\?)$/.match name
   puts "In default case, connects to named tty, optionally using setting string
 \t(settings must use GNU screen's syntax for serial config)"
   puts
-  puts "-l|--list  print list of tty symlinks in /dev w/o tty in the name"
+  puts "-l|--list  print list of tty symlinks in /dev with name not matching /^tty/"
   puts "-L|--List  print list of all tty symlinks in /dev"
   puts "-d [conf]  print default serial conf, or set user default conf (saved in dotfile)"
   puts "-D         delete user default conf, revert to hardcoded value"
@@ -32,15 +30,51 @@ if /^(help|-h|--help|-\?)$/.match name
   exit 1
 end
 
-# list, limit to aliases w/o tty in the name
-if /^(list|-l|--list)$/.match name
-  puts `find /dev -maxdepth 1 -type l -ilname "*tty*" | grep -v tty | cut -d'/' -f3 | sort -V`
-  exit 0
+# get current status of open ttys
+attached = `screen -list | grep Attached | cut -f2 | cut -d'.' -f1`.split
+detached = `screen -list | grep Detached | cut -f2 | cut -d'.' -f1`.split
+
+@tty2pid = {}
+`lsof -Fpn /dev/ttyUSB*`.gsub("\nn"," ").gsub(/^p/,"").split("\n").each do |f|
+  (fpid,fname) = f.split
+  fname.sub!("/dev/","")
+  @tty2pid[fname]=fpid
 end
 
-# list all serial device aliases
+# get pid using tty
+def tty2pid(tty)
+  if File.symlink? "/dev/#{tty}"
+    tty = File.readlink "/dev/#{tty}"
+  end
+  @tty2pid[tty]
+end
+
+# list serial device aliases
 if /^(list|-l|--list)$/i.match name
-  puts `find /dev -maxdepth 1 -type l -ilname "*tty*" | cut -d'/' -f3 | sort -V`
+  ttys = `find /dev -maxdepth 1 -type l -ilname "*tty*" | cut -d'/' -f3 | sort -V`.split
+
+  # unless flag is capitalized, filter out alias names beginning w/ tty
+  if /^(list|-l|--list)$/.match name
+    ttys.select! { |x| !x.match /^tty/ }
+  end
+
+  ttys.each do |tty|
+    status = ' '
+    pid = tty2pid(tty)
+    if pid
+      case pid
+      when *attached
+        status = 'A'
+      when *detached
+        status = 'D'
+      else
+        status = '?'
+      end
+    end
+    # print name of tty w/ status
+    puts "#{status}   #{tty}"
+  end
+
   exit 0
 end
 
@@ -125,23 +159,21 @@ if save
 end
 
 # try to connect to existing session, if found
-open_tty = `lsof | egrep '#{tty_name}\\b' | tr -s ' ' '\t' | cut -f2 | head -1`.chomp
-if !open_tty.empty?
-  session = `screen -list | grep '#{open_tty}\\.' | cut -f2`.chomp
-  attach = `screen -list | grep '#{open_tty}\\.' | cut -f4`.chomp
-
-  if session.empty?
-    puts "tty already in use by process other than screen: pid #{open_tty}"
+open_tty = tty2pid tty_name
+if open_tty
+  if (attached.include? open_tty)
+    puts "/dev/#{name} already in use by attached screen session #{open_tty}"
     exit 0
-  elsif (!/Detached/.match(attach))
-    puts "tty already in use by attached screen session #{open_tty}"
-    exit 0
-  else
-    print "tty already in use by detached screen session #{open_tty}, attach to this session (Y/n)? "
+  elsif (detached.include? open_tty)
+    print "/dev/#{name} in use by detached screen session #{open_tty}, attach to this session (Y/n)? "
     $stdin.gets.chomp.match(/^n/i) and exit 0
+    session = `screen -list | grep '#{open_tty}\\.' | cut -f2`.chomp
     cmd = "screen -r #{session}"
     puts "Connecting with command: #{cmd}"
     system(cmd)
+    exit 0
+  else
+    puts "/dev/#{name} already in use by process other than screen: pid #{open_tty}"
     exit 0
   end
 end
