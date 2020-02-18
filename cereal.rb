@@ -35,7 +35,7 @@ attached = `screen -list | grep Attached | cut -f2 | cut -d'.' -f1`.split
 detached = `screen -list | grep Detached | cut -f2 | cut -d'.' -f1`.split
 
 @tty2pid = {}
-`lsof -Fpn /dev/ttyUSB*`.gsub("\nn"," ").gsub(/^p/,"").split("\n").each do |f|
+`lsof -Fpn /dev/ttyUSB*`.gsub("\nn"," ").gsub(/\nf\w+/,"").gsub(/^p/,"").split("\n").each do |f|
   (fpid,fname) = f.split
   fname.sub!("/dev/","")
   @tty2pid[fname]=fpid
